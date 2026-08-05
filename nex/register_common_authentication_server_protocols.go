@@ -15,6 +15,7 @@ func registerCommonAuthenticationServerProtocols() {
 	ticketGrantingProtocol := ticketgranting.NewProtocol()
 	globals.AuthenticationEndpoint.RegisterServiceProtocol(ticketGrantingProtocol)
 	commonTicketGrantingProtocol := commonticketgranting.NewCommonProtocol(ticketGrantingProtocol)
+	commonTicketGrantingProtocol.ConfigurePNValidation([]string{"0016C600"})
 
 	port, _ := strconv.Atoi(os.Getenv("PN_YKWB_SECURE_SERVER_PORT"))
 

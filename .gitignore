@@ -31,4 +31,4 @@ log
 *.key
 *.pcap
 *.pcapng
-/data
+data/
