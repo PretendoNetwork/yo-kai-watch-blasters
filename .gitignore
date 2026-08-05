@@ -32,3 +32,4 @@ log
 *.pcap
 *.pcapng
 data/
+.DS_Store
