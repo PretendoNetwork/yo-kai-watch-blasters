@@ -2,16 +2,16 @@ package main
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
-	pb "github.com/PretendoNetwork/grpc-go/account"
+	pbfriends "github.com/PretendoNetwork/grpc/go/friends"
 	"github.com/PretendoNetwork/nex-go/v2"
-	"github.com/PretendoNetwork/nex-go/v2/types"
+	common_globals "github.com/PretendoNetwork/nex-protocols-common-go/v2/globals"
 	"github.com/PretendoNetwork/plogger-go"
-	"github.com/PretendoNetwork/yo-kai-watch-blasters/database"
 	"github.com/PretendoNetwork/yo-kai-watch-blasters/globals"
 	"github.com/joho/godotenv"
 	"google.golang.org/grpc"
@@ -35,12 +35,10 @@ func init() {
 	accountGRPCHost := os.Getenv("PN_YKWB_ACCOUNT_GRPC_HOST")
 	accountGRPCPort := os.Getenv("PN_YKWB_ACCOUNT_GRPC_PORT")
 	accountGRPCAPIKey := os.Getenv("PN_YKWB_ACCOUNT_GRPC_API_KEY")
-	postgresURI := os.Getenv("PN_YKWB_POSTGRES_URI")
-
-	if strings.TrimSpace(postgresURI) == "" {
-		globals.Logger.Error("PN_YKWB_POSTGRES_URI environment variable not set")
-		os.Exit(0)
-	}
+	friendsGRPCHost := os.Getenv("PN_YKWB_FRIENDS_GRPC_HOST")
+	friendsGRPCPort := os.Getenv("PN_YKWB_FRIENDS_GRPC_PORT")
+	friendsGRPCAPIKey := os.Getenv("PN_YKWB_FRIENDS_GRPC_API_KEY")
+	healthCheckPort := os.Getenv("PN_YKWB_HEALTH_CHECK_PORT")
 
 	kerberosPassword := make([]byte, 0x10)
 	_, err = rand.Read(kerberosPassword)
@@ -51,8 +49,7 @@ func init() {
 
 	globals.KerberosPassword = string(kerberosPassword)
 
-	globals.AuthenticationServerAccount = nex.NewAccount(types.NewPID(1), "Quazal Authentication", globals.KerberosPassword)
-	globals.SecureServerAccount = nex.NewAccount(types.NewPID(2), "Quazal Rendez-Vous", globals.KerberosPassword)
+	globals.InitAccounts()
 
 	if strings.TrimSpace(authenticationServerPort) == "" {
 		globals.Logger.Error("PN_YKWB_AUTHENTICATION_SERVER_PORT environment variable not set")
@@ -95,10 +92,11 @@ func init() {
 		os.Exit(0)
 	}
 
-	if port, err := strconv.Atoi(accountGRPCPort); err != nil {
+	accountPort, err := strconv.Atoi(accountGRPCPort)
+	if err != nil {
 		globals.Logger.Errorf("PN_YKWB_ACCOUNT_GRPC_PORT is not a valid port. Expected 0-65535, got %s", accountGRPCPort)
 		os.Exit(0)
-	} else if port < 0 || port > 65535 {
+	} else if accountPort < 0 || accountPort > 65535 {
 		globals.Logger.Errorf("PN_YKWB_ACCOUNT_GRPC_PORT is not a valid port. Expected 0-65535, got %s", accountGRPCPort)
 		os.Exit(0)
 	}
@@ -107,16 +105,50 @@ func init() {
 		globals.Logger.Warning("Insecure gRPC server detected. PN_YKWB_ACCOUNT_GRPC_API_KEY environment variable not set")
 	}
 
-	globals.GRPCAccountClientConnection, err = grpc.Dial(fmt.Sprintf("%s:%s", accountGRPCHost, accountGRPCPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		globals.Logger.Criticalf("Failed to connect to account gRPC server: %v", err)
+	common_globals.ConnectToAccountGRPC(accountGRPCHost, uint16(accountPort), accountGRPCAPIKey)
+
+	if strings.TrimSpace(friendsGRPCHost) == "" {
+		globals.Logger.Error("PN_YKWB_FRIENDS_GRPC_HOST environment variable not set")
 		os.Exit(0)
 	}
-
-	globals.GRPCAccountClient = pb.NewAccountClient(globals.GRPCAccountClientConnection)
-	globals.GRPCAccountCommonMetadata = metadata.Pairs(
-		"X-API-Key", accountGRPCAPIKey,
+	if strings.TrimSpace(friendsGRPCPort) == "" {
+		globals.Logger.Error("PN_YKWB_FRIENDS_GRPC_PORT environment variable not set")
+		os.Exit(0)
+	}
+	if port, err := strconv.Atoi(friendsGRPCPort); err != nil {
+		globals.Logger.Errorf("PN_YKWB_FRIENDS_GRPC_PORT is not a valid port. Expected 0-65535, got %s", accountGRPCPort)
+		os.Exit(0)
+	} else if port < 0 || port > 65535 {
+		globals.Logger.Errorf("PN_YKWB_FRIENDS_GRPC_PORT is not a valid port. Expected 0-65535, got %s", accountGRPCPort)
+		os.Exit(0)
+	}
+	if strings.TrimSpace(friendsGRPCAPIKey) == "" {
+		globals.Logger.Warning("Insecure gRPC server detected. PN_YKWB_FRIENDS_GRPC_API_KEY environment variable not set")
+	}
+	globals.GRPCFriendsClientConnection, err = grpc.Dial(fmt.Sprintf("%s:%s", friendsGRPCHost, friendsGRPCPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		globals.Logger.Criticalf("Failed to connect to friends gRPC server: %v", err)
+		os.Exit(0)
+	}
+	globals.GRPCFriendsClient = pbfriends.NewFriendsClient(globals.GRPCFriendsClientConnection)
+	globals.GRPCFriendsCommonMetadata = metadata.Pairs(
+		"X-API-Key", friendsGRPCAPIKey,
 	)
 
-	database.ConnectPostgres()
+	globals.Postgres, err = sql.Open("postgres", os.Getenv("PN_YKWB_POSTGRES_URI"))
+	if err != nil {
+		globals.Logger.Critical(err.Error())
+	}
+
+	if strings.TrimSpace(healthCheckPort) == "" {
+		globals.Logger.Warning("Basic UDP health check will not be enabled. PN_YKWB_HEALTH_CHECK_PORT environment variable not set")
+	} else if port, err := strconv.Atoi(healthCheckPort); err != nil {
+		globals.Logger.Errorf("PN_YKWB_HEALTH_CHECK_PORT is not a valid port. Expected 0-65535, got %s", healthCheckPort)
+		os.Exit(0)
+	} else if port < 0 || port > 65535 {
+		globals.Logger.Errorf("PN_YKWB_HEALTH_CHECK_PORT is not a valid port. Expected 0-65535, got %s", healthCheckPort)
+		os.Exit(0)
+	} else {
+		nex.EnableBasicUDPHealthCheck(port)
+	}
 }

@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/PretendoNetwork/nex-go/v2"
+	common_globals "github.com/PretendoNetwork/nex-protocols-common-go/v2/globals"
 	"github.com/PretendoNetwork/yo-kai-watch-blasters/globals"
 )
 
@@ -35,6 +36,9 @@ func StartSecureServer() {
 	globals.SecureEndpoint.OnError(func(err *nex.Error) {
 		globals.Logger.Errorf("Secure: %v", err)
 	})
+
+	globals.MatchmakingManager = common_globals.NewMatchmakingManager(globals.SecureEndpoint, globals.Postgres)
+	globals.MessagingManager = common_globals.NewMessagingManager(globals.SecureEndpoint, globals.Postgres)
 
 	registerCommonSecureServerProtocols()
 

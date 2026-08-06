@@ -8,7 +8,13 @@ import (
 )
 
 var AuthenticationServerAccount *nex.Account
+
 var SecureServerAccount *nex.Account
+
+func InitAccounts() {
+	AuthenticationServerAccount = nex.NewAccount(types.NewPID(1), "Quazal Authentication", KerberosPassword, false)
+	SecureServerAccount = nex.NewAccount(types.NewPID(2), "Quazal Rendez-Vous", KerberosPassword, false)
+}
 
 func AccountDetailsByPID(pid types.PID) (*nex.Account, *nex.Error) {
 	if pid.Equals(AuthenticationServerAccount.PID) {
@@ -19,12 +25,12 @@ func AccountDetailsByPID(pid types.PID) (*nex.Account, *nex.Error) {
 		return SecureServerAccount, nil
 	}
 
-	password, errorCode := PasswordFromPID(pid)
+	password, errorCode := PasswordFromPID(&pid)
 	if errorCode != 0 {
 		return nil, nex.NewError(errorCode, "Failed to get password from PID")
 	}
 
-	account := nex.NewAccount(pid, strconv.Itoa(int(pid)), password)
+	account := nex.NewAccount(pid, pid.String(), password, false)
 
 	return account, nil
 }
@@ -40,17 +46,19 @@ func AccountDetailsByUsername(username string) (*nex.Account, *nex.Error) {
 
 	pidInt, err := strconv.Atoi(username)
 	if err != nil {
+		Logger.Error(err.Error())
 		return nil, nex.NewError(nex.ResultCodes.RendezVous.InvalidUsername, "Invalid username")
 	}
 
 	pid := types.NewPID(uint64(pidInt))
 
-	password, errorCode := PasswordFromPID(pid)
+	password, errorCode := PasswordFromPID(&pid)
 	if errorCode != 0 {
+		Logger.Errorf("Password err: %v", errorCode)
 		return nil, nex.NewError(errorCode, "Failed to get password from PID")
 	}
 
-	account := nex.NewAccount(pid, username, password)
+	account := nex.NewAccount(pid, username, password, false)
 
 	return account, nil
 }
