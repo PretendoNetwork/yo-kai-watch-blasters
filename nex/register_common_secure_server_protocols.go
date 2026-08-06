@@ -58,11 +58,4 @@ func registerCommonSecureServerProtocols() {
 	messageDeliveryProtocol := messagedelivery.NewProtocol()
 	globals.SecureEndpoint.RegisterServiceProtocol(messageDeliveryProtocol)
 	commonmessagedelivery.NewCommonProtocol(messageDeliveryProtocol).SetManager(globals.MessagingManager)
-
-	// * Commented for now, unsure if required.
-	// commonMatchmakeExtensionProtocol.CleanupMatchmakeSessionSearchCriterias = func(searchCriterias types.List[matchmakingtypes.MatchmakeSessionSearchCriteria]) {
-	// 	for _, searchCriteria := range searchCriterias {
-	// 		searchCriteria.Attribs[2] = types.NewString("")
-	// 	}
-	// }
 }
